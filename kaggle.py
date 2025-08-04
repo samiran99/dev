@@ -1,19 +1,24 @@
 import requests
 
-# Remote file URL (you can change the month)
-file_url = "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-01.parquet"
+from pyspark.sql.functions import to_date, col
 
-# Download file contents into a temporary location
-local_path = "/tmp/yellow_tripdata_2023-01.parquet"
-
-# Stream and save the file
-with requests.get(file_url, stream=True) as r:
-    with open(local_path, 'wb') as f:
-        for chunk in r.iter_content(chunk_size=8192):
-            f.write(chunk)
+# NYC TLC Parquet file for January 2023
+url = "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-01.parquet"
 
 # Load into Spark DataFrame
-df = spark.read.parquet(local_path)
+df = spark.read.parquet(url)
+
+# Add a partition column (truncate datetime to date)
+df = df.withColumn("pickup_date", to_date(col("tpep_pickup_datetime")))
+
+# Preview
+display(df.select("tpep_pickup_datetime", "pickup_date"))
 
 # Preview the data
 display(df)
+
+# Save to Lakehouse Tables with partitioning
+df.write.partitionBy("pickup_date") \
+    .format("delta") \
+    .mode("overwrite") \
+    .save("Tables/nyc_taxi_partitioned")
